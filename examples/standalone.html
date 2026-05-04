@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Scene Decoration — Standalone Demo</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #16202c; color: #e8eef7; }
+  .wrap { display: grid; grid-template-columns: 220px 1fr; height: 100vh; }
+  .side { padding: 12px; background: #1f2a39; border-right: 1px solid #333; overflow-y: auto; }
+  canvas { display: block; width: 100%; height: 100%; }
+  button { width: 100%; margin: 4px 0; padding: 6px; cursor: pointer; }
+</style>
+<script src="../src/scene-decoration.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="side">
+    <h3>Scene Decoration Demo</h3>
+    <p>Two mock "scenes" with a few decoration sprites, drift motion, ballNear bend trigger.</p>
+    <button data-scene="meadow">Meadow</button>
+    <button data-scene="sky">Sky</button>
+    <p style="font-size:11px;opacity:0.7">Move the mouse over the canvas to see ball-proximity trigger.</p>
+  </div>
+  <div style="position:relative">
+    <canvas id="stage"></canvas>
+  </div>
+</div>
+<script>
+  const SCENES = {
+    meadow: {
+      theme: { sky1: '#c9e3ef', sky2: '#eaf4da', ground: '#9cc26d', dirt: '#7a5a38' },
+      decorations: [
+        { sprite: '', layer: 'ground', density: 0.06, w: 28, h: 36, scaleMin: 0.9, scaleMax: 1.2,
+          trigger: { type: 'ballNear', radius: 50, anim: 'bend', strength: 0.6 } },
+        { sprite: '', layer: 'sky', density: 0.08, w: 100, h: 50, skyMin: 0.06, skyMax: 0.4,
+          motion: { type: 'drift', speed: 8, wobbleAmp: 3 } }
+      ]
+    },
+    sky: {
+      theme: { sky1: '#6a98d0', sky2: '#b5d3ee', ground: '#cad6e0', dirt: '#3a4a60' },
+      decorations: [
+        { sprite: '', layer: 'sky', density: 0.07, w: 110, h: 60, skyMin: 0.05, skyMax: 0.25,
+          motion: { type: 'drift', speed: 9 } },
+        { sprite: '', layer: 'sky', density: 0.04, w: 26, h: 24, skyMin: 0.35, skyMax: 0.65,
+          motion: { type: 'flap', speed: 28, wobbleAmp: 14 } }
+      ]
+    }
+  };
+
+  let current = 'meadow';
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d');
+  const cursor = { x: -9999, y: -9999, inside: false };
+  const cache = SceneDecoration.createImageCache({ onLoad: () => render() });
+
+  function fit() {
+    const dpr = window.devicePixelRatio || 1;
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.floor(r.width * dpr);
+    canvas.height = Math.floor(r.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return r;
+  }
+  function render() {
+    const r = fit();
+    ctx.clearRect(0, 0, r.width, r.height);
+    const sc = SCENES[current];
+    SceneDecoration.renderStage({
+      ctx, w: r.width, h: r.height,
+      theme: sc.theme,
+      decorations: sc.decorations,
+      cursor,
+      imgFor: (s) => cache.get(s)
+    });
+  }
+  function loop() { render(); requestAnimationFrame(loop); }
+
+  document.querySelectorAll('button[data-scene]').forEach(b => {
+    b.addEventListener('click', () => { current = b.dataset.scene; });
+  });
+  canvas.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    cursor.x = e.clientX - r.left; cursor.y = e.clientY - r.top; cursor.inside = true;
+  });
+  canvas.addEventListener('mouseleave', () => { cursor.inside = false; });
+  window.addEventListener('resize', render);
+  loop();
+</script>
+</body>
+</html>
