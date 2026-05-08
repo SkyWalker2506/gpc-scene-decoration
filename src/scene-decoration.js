@@ -147,7 +147,7 @@
   //   theme: { sky1, sky2, ground, dirt }   — background gradient + ground bands
   //   decorations: array       — schema list (see defaultDecorationSchema)
   //   selectedIdx (optional)   — highlight + collider preview
-  //   cursor (optional)        — { x, y, inside } in CSS px
+  //   cursor (optional)        — { x, y, inside } in CSS px (in screen/viewport space)
   //   imgFor(src) -> entry     — image cache lookup
   //   time (optional)          — seconds (defaults to performance.now()/1000)
   //   layoutSeed (optional)    — number, default 0.42
@@ -156,7 +156,10 @@
   //   drawBall (optional, default true) — show the cursor "ball" indicator
   //   groundFrac (optional, default 0.66) — vertical ground line as fraction
   //   groundTiles (optional)   — [{sprite, weight}] tile chain; replaces flat ground colors
-  // returns { decoCount }
+  //   camera (optional)        — { x: panOffsetPx, scale: zoomFactor }
+  //                              canvas view = world translated by (-cam.x, 0) then scaled
+  // returns { decoCount, groundY, bboxes }
+  //   bboxes: [{kind:'deco', idx, sprite, x, y, w, h}] world-space hit rects for last frame
   function renderStage(opts) {
     const ctx        = opts.ctx;
     const w          = opts.w;
@@ -164,7 +167,6 @@
     const theme      = opts.theme || {};
     const decos      = opts.decorations || [];
     const selectedIdx = (typeof opts.selectedIdx === 'number') ? opts.selectedIdx : -1;
-    const cursor     = opts.cursor || { x: -9999, y: -9999, inside: false };
     const imgFor     = opts.imgFor || function () { return null; };
     const t          = (typeof opts.time === 'number') ? opts.time : (performance.now() / 1000);
     const layoutSeed = (typeof opts.layoutSeed === 'number') ? opts.layoutSeed : 0.42;
@@ -172,16 +174,41 @@
     const drawBg      = opts.drawBackground !== false;
     const drawBall    = opts.drawBall !== false;
     const groundTiles = Array.isArray(opts.groundTiles) ? opts.groundTiles : null;
+    const camera      = (opts.camera && typeof opts.camera === 'object') ? opts.camera : null;
+    const camX        = camera ? (Number(camera.x) || 0) : 0;
+    const camScale    = camera ? Math.max(0.1, Number(camera.scale) || 1) : 1;
+    // World size remains the unscaled stage size. Zoom comes from canvas transform.
+    const worldW      = w;
+
+    // bbox list — populated during decoration draw, returned to caller
+    const bboxes = [];
+
+    // Convert screen cursor to world space for trigger/ball calculations
+    const rawCursor = opts.cursor || { x: -9999, y: -9999, inside: false };
+    const cursor = {
+      x: (rawCursor.x / camScale) + camX,
+      y: rawCursor.y / camScale,
+      inside: rawCursor.inside
+    };
 
     const groundY = Math.floor(h * groundFrac);
 
+    // Apply camera transform for all world-space drawing
+    ctx.save();
+    ctx.scale(camScale, camScale);
+    ctx.translate(-camX, 0);
+
+    const wW = worldW;   // world width (unscaled stage width)
+    const wH = h;        // world height (unscaled stage height)
+
     if (drawBg) {
-      // Sky gradient
-      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      // Sky gradient — use world-space coords (inside scaled ctx)
+      const grad = ctx.createLinearGradient(0, 0, 0, wH);
       grad.addColorStop(0, theme.sky1 || '#c9e3ef');
       grad.addColorStop(1, theme.sky2 || '#eaf4da');
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
+      // Fill a wide strip covering camX offset to ensure full coverage during pan
+      ctx.fillRect(camX - 10, 0, wW + 20, wH);
 
       if (groundTiles && groundTiles.length > 0) {
         // --- Sprite-based ground + underground ---
@@ -206,14 +233,15 @@
         if (_gtImgs.length > 0) {
           // Fill dirt background color first (visible below tile strip)
           ctx.fillStyle = theme.dirt || '#7a5a38';
-          ctx.fillRect(0, groundY, w, h - groundY);
-          // Draw tiled sprite strip from groundY down to h
+          ctx.fillRect(camX - 10, groundY, wW + 20, wH - groundY);
+          // Draw tiled sprite strip from groundY down to wH
           var _gtMaxH = 0;
           for (var _m = 0; _m < _gtImgs.length; _m++) {
             var _mh = _gtImgs[_m].naturalHeight || _gtImgs[_m].height || 0;
             if (_mh > _gtMaxH) _gtMaxH = _mh;
           }
-          var _tileH = Math.max(_gtMaxH, h - groundY);
+          var _tileH = Math.max(_gtMaxH, wH - groundY);
+          var _tileW = Math.ceil(wW + 20);
           var _tx = 0;
           var _tidx = 0;
           var _loop = 0;
@@ -221,13 +249,13 @@
           // Draw tile chain onto an offscreen canvas then blit.
           // Use floored integer positions + 1px overlap to eliminate sub-pixel gaps.
           var _edOff = null;
-          try { _edOff = new OffscreenCanvas(w, _tileH); } catch (_) {
+          try { _edOff = new OffscreenCanvas(_tileW, _tileH); } catch (_) {
             _edOff = document.createElement('canvas');
-            _edOff.width = w; _edOff.height = _tileH;
+            _edOff.width = _tileW; _edOff.height = _tileH;
           }
           var _edCtx = _edOff.getContext('2d');
-          _edCtx.clearRect(0, 0, w, _tileH);
-          while (_tx < w && _loop < 800) {
+          _edCtx.clearRect(0, 0, _tileW, _tileH);
+          while (_tx < _tileW && _loop < 800) {
             var _timg = _gtImgs[_tidx % _gtImgs.length];
             // HTMLImageElement: naturalWidth; OffscreenCanvas/Canvas: width
             var _tw = Math.floor(_timg.naturalWidth || _timg.width || 64);
@@ -239,25 +267,25 @@
             _tidx++;
             _loop++;
           }
-          ctx.drawImage(_edOff, 0, groundY);
+          ctx.drawImage(_edOff, camX - 10, groundY);
           ctx.restore();
         } else {
           // Tiles not yet loaded — fall back to flat colors, will re-render next frame
           ctx.fillStyle = theme.ground || '#9cc26d';
-          ctx.fillRect(0, groundY, w, h - groundY);
+          ctx.fillRect(camX - 10, groundY, wW + 20, wH - groundY);
           ctx.fillStyle = theme.dirt || '#7a5a38';
-          ctx.fillRect(0, groundY + 30, w, Math.max(0, h - groundY - 30));
+          ctx.fillRect(camX - 10, groundY + 30, wW + 20, Math.max(0, wH - groundY - 30));
         }
       } else {
         // --- Flat color ground (legacy / no tiles) ---
         ctx.fillStyle = theme.ground || '#9cc26d';
-        ctx.fillRect(0, groundY, w, h - groundY);
+        ctx.fillRect(camX - 10, groundY, wW + 20, wH - groundY);
         ctx.fillStyle = theme.dirt || '#7a5a38';
-        ctx.fillRect(0, groundY + 30, w, Math.max(0, h - groundY - 30));
+        ctx.fillRect(camX - 10, groundY + 30, wW + 20, Math.max(0, wH - groundY - 30));
       }
     }
 
-    const ballX = cursor.inside ? cursor.x : Math.floor(w * 0.4);
+    const ballX = cursor.inside ? cursor.x : Math.floor((camX + wW * 0.4));
     const ballY = cursor.inside ? cursor.y : groundY - 18;
 
     for (let di = 0; di < decos.length; di++) {
@@ -277,11 +305,12 @@
       const step = Math.max(8, Math.round(100 / density));
       const rng = makeSeeded(di * 911, layoutSeed);
 
-      const drawOne = (px, baseY, scale) => {
+      const drawOne = (px, baseY, scale, trackBbox) => {
         const dw = baseW * scale;
         const dh = baseH * scale;
         const dx = px - dw / 2 + (Number(pivot.x) || 0);
         const dy = (layer === 'sky' ? baseY : baseY - dh) + (Number(pivot.y) || 0);
+        if (trackBbox) bboxes.push({ kind: 'deco', idx: di, sprite: d.sprite || '', x: dx, y: dy, w: dw, h: dh });
         ctx.save();
         if (img && img.complete && img.naturalWidth) {
           ctx.drawImage(img.draw || img, dx, dy, dw, dh);
@@ -307,14 +336,14 @@
       // Explicit Place-mode instances first.
       if (Array.isArray(d.instances)) {
         for (const inst of d.instances) {
-          const px = (Number(inst.xFrac) || 0) * w;
+          const px = (Number(inst.xFrac) || 0) * wW;
           const baseY = (layer === 'sky') ? (groundY * 0.3) : (groundY + (Number(inst.yOff) || 0));
-          drawOne(px, baseY, Number(inst.scale) || 1);
+          drawOne(px, baseY, Number(inst.scale) || 1, true);
         }
       }
       if (!useRandomLayout) continue;
 
-      for (let x = 8; x < w - 8; x += step) {
+      for (let x = 8; x < wW - 8; x += step) {
         const jitter = (rng() - 0.5) * step * 0.6;
         let px = x + jitter;
         const scale = scaleMin + rng() * Math.max(0, scaleMax - scaleMin);
@@ -337,7 +366,7 @@
           const speed = Number(d.motion.speed) || 0;
           const wobble = Number(d.motion.wobbleAmp) || 0;
           if (d.motion.type === 'drift') {
-            px = ((px + t * speed) % (w + dw + 80)) - 40;
+            px = ((px + t * speed) % (wW + dw + 80)) - 40;
             baseY += Math.sin(t * 0.6 + phase) * wobble;
           } else if (d.motion.type === 'flap') {
             px += Math.sin(t * speed * 0.05 + phase) * 30;
@@ -370,6 +399,7 @@
           }
         }
 
+        bboxes.push({ kind: 'deco', idx: di, sprite: d.sprite || '', x: dx, y: dy, w: dw, h: dh });
         ctx.save();
         const pivotPX = dx + dw / 2;
         const pivotPY = layer === 'sky' ? (baseY + dh * 0.5) : (groundY + offsetY);
@@ -446,7 +476,15 @@
       ctx.restore();
     }
 
-    return { decoCount: decos.length, groundY: groundY };
+    // Close camera transform
+    ctx.restore();
+
+    // Expose bboxes globally for hit-testing by the editor
+    if (typeof window !== 'undefined') {
+      window.__editorBBoxes = bboxes;
+    }
+
+    return { decoCount: decos.length, groundY: groundY, bboxes: bboxes };
   }
 
   // Returns true if ANY decoration in the list is animated (sky + motion).
