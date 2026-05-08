@@ -158,6 +158,10 @@
   //   groundTiles (optional)   — [{sprite, weight}] tile chain; replaces flat ground colors
   //   camera (optional)        — { x: panOffsetPx, scale: zoomFactor }
   //                              canvas view = world translated by (-cam.x, 0) then scaled
+  //   backdropExtras (optional) — { mountains, jaggedUnderground, pebbles, roots }
+  //                              object flags to draw game-parity backdrop layers
+  //   editorTriggerPreview (optional, default false) — when true cursor proximity
+  //                              triggers bend/wobble/pop animations; false = static
   // returns { decoCount, groundY, bboxes }
   //   bboxes: [{kind:'deco', idx, sprite, x, y, w, h}] world-space hit rects for last frame
   function renderStage(opts) {
@@ -177,6 +181,8 @@
     const camera      = (opts.camera && typeof opts.camera === 'object') ? opts.camera : null;
     const camX        = camera ? (Number(camera.x) || 0) : 0;
     const camScale    = camera ? Math.max(0.1, Number(camera.scale) || 1) : 1;
+    const bdExtras    = (opts.backdropExtras && typeof opts.backdropExtras === 'object') ? opts.backdropExtras : null;
+    const triggerPreview = opts.editorTriggerPreview === true;
     // World size remains the unscaled stage size. Zoom comes from canvas transform.
     const worldW      = w;
 
@@ -293,12 +299,120 @@
           ctx.fillStyle = theme.dirt || '#7a5a38';
           ctx.fillRect(camX - 10, groundY + 30, wW + 20, Math.max(0, wH - groundY - 30));
         }
-      } else {
-        // --- Flat color ground (legacy / no tiles) ---
-        ctx.fillStyle = theme.ground || '#9cc26d';
-        ctx.fillRect(camX - 10, groundY, wW + 20, wH - groundY);
-        ctx.fillStyle = theme.dirt || '#7a5a38';
-        ctx.fillRect(camX - 10, groundY + 30, wW + 20, Math.max(0, wH - groundY - 30));
+      }
+    }
+
+    // --- Backdrop extras: game-parity layers (mountains, jagged underground, pebbles, roots) ---
+    if (drawBg && bdExtras) {
+      // Mountain silhouette (distant, 3 layers)
+      if (bdExtras.mountains) {
+        var _mColors = [
+          theme.mountain1 || 'rgba(100,130,170,0.55)',
+          theme.mountain2 || 'rgba(80,110,150,0.45)',
+          theme.mountain3 || 'rgba(60,90,130,0.35)'
+        ];
+        var _mSeeds = [7, 13, 29];
+        for (var _ml = 0; _ml < 3; _ml++) {
+          var _mRng = makeSeeded(_ml * 777, layoutSeed);
+          var _mOffY = groundY * (0.22 + _ml * 0.08);
+          ctx.save();
+          ctx.fillStyle = _mColors[_ml];
+          ctx.beginPath();
+          var _mx = camX - 10;
+          ctx.moveTo(_mx, groundY);
+          ctx.lineTo(_mx, _mOffY + 30);
+          var _mStep = 36 + _ml * 20;
+          while (_mx < camX + wW + 10) {
+            var _mPeakH = 28 + _mRng() * 44 + _ml * 12;
+            var _mW2 = _mStep * 0.6 + _mRng() * _mStep * 0.6;
+            ctx.lineTo(_mx + _mW2 * 0.5, _mOffY + 30 - _mPeakH);
+            ctx.lineTo(_mx + _mW2, _mOffY + 30);
+            _mx += _mW2 + _mStep * 0.2;
+          }
+          ctx.lineTo(_mx, groundY);
+          ctx.closePath();
+          ctx.fill();
+          // Snow caps on tallest peaks (first layer only)
+          if (_ml === 0) {
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            var _mRng2 = makeSeeded(_ml * 777, layoutSeed);
+            var _mx2 = camX - 10;
+            while (_mx2 < camX + wW + 10) {
+              var _mPeakH2 = 28 + _mRng2() * 44 + _ml * 12;
+              var _mW3 = _mStep * 0.6 + _mRng2() * _mStep * 0.6;
+              if (_mPeakH2 > 45) {
+                var _capTip = _mOffY + 30 - _mPeakH2;
+                ctx.beginPath();
+                ctx.moveTo(_mx2 + _mW3 * 0.5, _capTip);
+                ctx.lineTo(_mx2 + _mW3 * 0.5 - 7, _capTip + 12);
+                ctx.lineTo(_mx2 + _mW3 * 0.5 + 7, _capTip + 12);
+                ctx.closePath();
+                ctx.fill();
+              }
+              _mx2 += _mW3 + _mStep * 0.2;
+            }
+          }
+          ctx.restore();
+        }
+      }
+      // Jagged underground (rock strata + roots)
+      if (bdExtras.jaggedUnderground) {
+        var _ugRng = makeSeeded(9991, layoutSeed);
+        // Strata line 1
+        ctx.save();
+        ctx.strokeStyle = theme.dirtStrata || 'rgba(100,70,30,0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        var _ux = camX - 10;
+        ctx.moveTo(_ux, groundY + 18);
+        while (_ux < camX + wW + 10) {
+          _ux += 12 + _ugRng() * 16;
+          ctx.lineTo(_ux, groundY + 14 + _ugRng() * 12);
+        }
+        ctx.stroke();
+        // Strata line 2
+        ctx.beginPath();
+        _ux = camX - 10;
+        ctx.moveTo(_ux, groundY + 36);
+        while (_ux < camX + wW + 10) {
+          _ux += 14 + _ugRng() * 20;
+          ctx.lineTo(_ux, groundY + 30 + _ugRng() * 14);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+      // Pebbles scattered on ground surface
+      if (bdExtras.pebbles) {
+        var _prng = makeSeeded(4242, layoutSeed);
+        ctx.save();
+        ctx.fillStyle = theme.pebble || 'rgba(120,100,80,0.50)';
+        var _pCount = Math.floor(wW / 40);
+        for (var _pi = 0; _pi < _pCount; _pi++) {
+          var _px2 = camX + _prng() * wW;
+          var _py2 = groundY - 3 - _prng() * 6;
+          var _pr = 2 + _prng() * 4;
+          ctx.beginPath();
+          ctx.ellipse(_px2, _py2, _pr, _pr * 0.6, _prng() * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      // Roots (short curving lines hanging from groundY)
+      if (bdExtras.roots) {
+        var _rrng = makeSeeded(7777, layoutSeed);
+        ctx.save();
+        ctx.strokeStyle = theme.roots || 'rgba(80,50,20,0.30)';
+        ctx.lineWidth = 1.5;
+        var _rCount = Math.floor(wW / 55);
+        for (var _ri = 0; _ri < _rCount; _ri++) {
+          var _rx = camX + _rrng() * wW;
+          var _rDepth = 12 + _rrng() * 20;
+          ctx.beginPath();
+          ctx.moveTo(_rx, groundY + 4);
+          ctx.bezierCurveTo(_rx + 6, groundY + 8, _rx - 6, groundY + 12, _rx + (_rrng() - 0.5) * 10, groundY + _rDepth);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
     }
 
@@ -408,36 +522,10 @@
         const dx = px - dw / 2 + (Number(pivot.x) || 0);
         const dy = (layer === 'sky' ? baseY : baseY - dh) + (Number(pivot.y) || 0);
 
-        let rot = 0, scaleK = 1;
-        if (d.trigger && d.trigger.type === 'ballNear' && cursor.inside) {
-          const radius = Math.max(8, Number(d.trigger.radius) || 60);
-          const dist = Math.hypot(px - ballX, (groundY - 10) - ballY);
-          if (dist < radius) {
-            const tt = 1 - dist / radius;
-            const dir = ballX < px ? 1 : -1;
-            const strength = Number(d.trigger.strength) || 0.5;
-            if (d.trigger.anim === 'bend') rot = tt * strength * 0.9 * dir;
-            else if (d.trigger.anim === 'wobble') rot = Math.sin(performance.now() * 0.012) * tt * strength * 0.5 * dir;
-            else if (d.trigger.anim === 'pop') scaleK = 1 + tt * strength * 0.5;
-          }
-        } else if (d.trigger && d.trigger.type === 'ballOver' && cursor.inside) {
-          const dx2 = Math.abs(px - ballX);
-          if (dx2 < dw * 0.6 && Math.abs(ballY - (groundY - 10)) < 30) {
-            const strength = Number(d.trigger.strength) || 0.7;
-            if (d.trigger.anim === 'bend') rot = 0.6 * strength * (ballX < px ? 1 : -1);
-            else if (d.trigger.anim === 'wobble') rot = Math.sin(performance.now() * 0.02) * strength * 0.4;
-            else if (d.trigger.anim === 'pop') scaleK = 1 + strength * 0.45;
-          }
-        }
-
         bboxes.push({ kind: 'deco', idx: di, sprite: d.sprite || '', x: dx, y: dy, w: dw, h: dh });
         ctx.save();
         const pivotPX = dx + dw / 2;
         const pivotPY = layer === 'sky' ? (baseY + dh * 0.5) : (groundY + offsetY);
-        ctx.translate(pivotPX, pivotPY);
-        if (rot) ctx.rotate(rot);
-        if (scaleK !== 1) ctx.scale(scaleK, scaleK);
-        ctx.translate(-pivotPX, -pivotPY);
 
         if (img && img.complete && img.naturalWidth) {
           ctx.drawImage(img.draw || img, dx, dy, dw, dh);
