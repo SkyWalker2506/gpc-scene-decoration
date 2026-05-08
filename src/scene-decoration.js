@@ -172,7 +172,7 @@
     const layoutSeed = (typeof opts.layoutSeed === 'number') ? opts.layoutSeed : 0.42;
     const groundFrac  = (typeof opts.groundFrac === 'number') ? opts.groundFrac : 0.66;
     const drawBg      = opts.drawBackground !== false;
-    const drawBall    = opts.drawBall !== false;
+    const drawBall    = opts.drawBall === true;
     const groundTiles = Array.isArray(opts.groundTiles) ? opts.groundTiles : null;
     const camera      = (opts.camera && typeof opts.camera === 'object') ? opts.camera : null;
     const camX        = camera ? (Number(camera.x) || 0) : 0;
@@ -283,6 +283,8 @@
             _loop++;
           }
           ctx.drawImage(_edOff, camX - 10, groundY);
+          // Push ground strip bbox so the editor can hit-test clicks on the ground
+          bboxes.push({ kind: 'ground-default', idx: 0, sprite: (groundTiles[0] && groundTiles[0].sprite) || '', x: camX - 10, y: groundY, w: wW + 20, h: Math.min(_tileH, wH - groundY) });
           ctx.restore();
         } else {
           // Tiles not yet loaded — fall back to flat colors, will re-render next frame
