@@ -193,6 +193,21 @@
 
     const groundY = Math.floor(h * groundFrac);
 
+    // --- Out-of-world background (screen-space, before camera transform) ---
+    // Fills entire canvas with a subtle dashed grid so zoomed-out areas aren't black.
+    if (drawBg) {
+      ctx.save();
+      ctx.fillStyle = '#1a1a2a';
+      ctx.fillRect(0, 0, w, h);
+      // Dashed grid overlay
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.lineWidth = 1;
+      const gStep = 32;
+      for (let gx = 0; gx <= w; gx += gStep) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke(); }
+      for (let gy = 0; gy <= h; gy += gStep) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke(); }
+      ctx.restore();
+    }
+
     // Apply camera transform for all world-space drawing
     ctx.save();
     ctx.scale(camScale, camScale);
@@ -285,6 +300,16 @@
       }
     }
 
+    // World boundary markers: dashed red lines at x=0 and x=wW
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,80,80,0.55)';
+    ctx.lineWidth = 2 / camScale;
+    ctx.setLineDash([6 / camScale, 4 / camScale]);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, wH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wW, 0); ctx.lineTo(wW, wH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
     const ballX = cursor.inside ? cursor.x : Math.floor((camX + wW * 0.4));
     const ballY = cursor.inside ? cursor.y : groundY - 18;
 
@@ -324,11 +349,15 @@
           ctx.setLineDash([]);
         }
         if (isSelected) {
-          ctx.strokeStyle = 'rgba(109,210,138,0.95)';
-          ctx.setLineDash([4, 3]);
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(dx, dy, dw, dh);
+          const lw = 2.5 / camScale;
+          ctx.strokeStyle = 'rgba(0,220,255,0.95)';
+          ctx.setLineDash([5 / camScale, 3 / camScale]);
+          ctx.lineWidth = lw;
+          ctx.strokeRect(dx - lw, dy - lw, dw + lw * 2, dh + lw * 2);
           ctx.setLineDash([]);
+          const hs = 5 / camScale;
+          ctx.fillStyle = 'rgba(0,220,255,0.95)';
+          [[dx - lw, dy - lw],[dx + dw + lw - hs, dy - lw],[dx - lw, dy + dh + lw - hs],[dx + dw + lw - hs, dy + dh + lw - hs]].forEach(([hx, hy]) => ctx.fillRect(hx, hy, hs, hs));
         }
         ctx.restore();
       };
@@ -427,11 +456,15 @@
         }
 
         if (isSelected) {
-          ctx.strokeStyle = 'rgba(109,210,138,0.95)';
-          ctx.setLineDash([4, 3]);
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(dx, dy, dw, dh);
+          const lw = 2.5 / camScale;
+          ctx.strokeStyle = 'rgba(0,220,255,0.95)';
+          ctx.setLineDash([5 / camScale, 3 / camScale]);
+          ctx.lineWidth = lw;
+          ctx.strokeRect(dx - lw, dy - lw, dw + lw * 2, dh + lw * 2);
           ctx.setLineDash([]);
+          const hs = 5 / camScale;
+          ctx.fillStyle = 'rgba(0,220,255,0.95)';
+          [[dx - lw, dy - lw],[dx + dw + lw - hs, dy - lw],[dx - lw, dy + dh + lw - hs],[dx + dw + lw - hs, dy + dh + lw - hs]].forEach(([hx, hy]) => ctx.fillRect(hx, hy, hs, hs));
         }
 
         if (isSelected && d.collider && d.collider.shape) {
