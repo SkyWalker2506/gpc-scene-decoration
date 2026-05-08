@@ -231,6 +231,58 @@
       // Fill a wide strip covering camX offset to ensure full coverage during pan
       ctx.fillRect(camX - 10, 0, wW + 20, wH);
 
+      // --- Mountain layers drawn right after sky, before ground tiles ---
+      if (bdExtras && bdExtras.mountains) {
+        var _mColors2 = [
+          theme.mountain1 || 'rgba(100,130,170,0.55)',
+          theme.mountain2 || 'rgba(80,110,150,0.45)',
+          theme.mountain3 || 'rgba(60,90,130,0.35)'
+        ];
+        for (var _ml2 = 0; _ml2 < 3; _ml2++) {
+          var _mRng3 = makeSeeded(_ml2 * 777, layoutSeed);
+          var _mOffY2 = groundY * (0.22 + _ml2 * 0.08);
+          ctx.save();
+          ctx.fillStyle = _mColors2[_ml2];
+          ctx.beginPath();
+          var _mx3 = camX - 10;
+          ctx.moveTo(_mx3, groundY);
+          ctx.lineTo(_mx3, _mOffY2 + 30);
+          var _mStep2 = 36 + _ml2 * 20;
+          var _mx3orig = _mx3;
+          while (_mx3 < camX + wW + 10) {
+            var _mPeakH3 = 28 + _mRng3() * 44 + _ml2 * 12;
+            var _mW4 = _mStep2 * 0.6 + _mRng3() * _mStep2 * 0.6;
+            ctx.lineTo(_mx3 + _mW4 * 0.5, _mOffY2 + 30 - _mPeakH3);
+            ctx.lineTo(_mx3 + _mW4, _mOffY2 + 30);
+            _mx3 += _mW4 + _mStep2 * 0.2;
+          }
+          ctx.lineTo(_mx3, groundY);
+          ctx.closePath();
+          ctx.fill();
+          // Snow caps (first layer only, tallest peaks)
+          if (_ml2 === 0) {
+            ctx.fillStyle = 'rgba(255,255,255,0.38)';
+            var _mRng4 = makeSeeded(0 * 777, layoutSeed);
+            var _mx4 = camX - 10;
+            while (_mx4 < camX + wW + 10) {
+              var _mPeakH4 = 28 + _mRng4() * 44;
+              var _mW5 = _mStep2 * 0.6 + _mRng4() * _mStep2 * 0.6;
+              if (_mPeakH4 > 45) {
+                var _capTip2 = _mOffY2 + 30 - _mPeakH4;
+                ctx.beginPath();
+                ctx.moveTo(_mx4 + _mW5 * 0.5, _capTip2);
+                ctx.lineTo(_mx4 + _mW5 * 0.5 - 7, _capTip2 + 12);
+                ctx.lineTo(_mx4 + _mW5 * 0.5 + 7, _capTip2 + 12);
+                ctx.closePath();
+                ctx.fill();
+              }
+              _mx4 += _mW5 + _mStep2 * 0.2;
+            }
+          }
+          ctx.restore();
+        }
+      }
+
       if (groundTiles && groundTiles.length > 0) {
         // --- Sprite-based ground + underground ---
         // Collect loaded HTMLImageElement entries from imgFor cache
@@ -302,59 +354,9 @@
       }
     }
 
-    // --- Backdrop extras: game-parity layers (mountains, jagged underground, pebbles, roots) ---
+    // --- Backdrop extras: ground-level layers (jagged underground, pebbles, roots) ---
+    // Mountains are drawn earlier (after sky gradient) via the separate inline block.
     if (drawBg && bdExtras) {
-      // Mountain silhouette (distant, 3 layers)
-      if (bdExtras.mountains) {
-        var _mColors = [
-          theme.mountain1 || 'rgba(100,130,170,0.55)',
-          theme.mountain2 || 'rgba(80,110,150,0.45)',
-          theme.mountain3 || 'rgba(60,90,130,0.35)'
-        ];
-        var _mSeeds = [7, 13, 29];
-        for (var _ml = 0; _ml < 3; _ml++) {
-          var _mRng = makeSeeded(_ml * 777, layoutSeed);
-          var _mOffY = groundY * (0.22 + _ml * 0.08);
-          ctx.save();
-          ctx.fillStyle = _mColors[_ml];
-          ctx.beginPath();
-          var _mx = camX - 10;
-          ctx.moveTo(_mx, groundY);
-          ctx.lineTo(_mx, _mOffY + 30);
-          var _mStep = 36 + _ml * 20;
-          while (_mx < camX + wW + 10) {
-            var _mPeakH = 28 + _mRng() * 44 + _ml * 12;
-            var _mW2 = _mStep * 0.6 + _mRng() * _mStep * 0.6;
-            ctx.lineTo(_mx + _mW2 * 0.5, _mOffY + 30 - _mPeakH);
-            ctx.lineTo(_mx + _mW2, _mOffY + 30);
-            _mx += _mW2 + _mStep * 0.2;
-          }
-          ctx.lineTo(_mx, groundY);
-          ctx.closePath();
-          ctx.fill();
-          // Snow caps on tallest peaks (first layer only)
-          if (_ml === 0) {
-            ctx.fillStyle = 'rgba(255,255,255,0.35)';
-            var _mRng2 = makeSeeded(_ml * 777, layoutSeed);
-            var _mx2 = camX - 10;
-            while (_mx2 < camX + wW + 10) {
-              var _mPeakH2 = 28 + _mRng2() * 44 + _ml * 12;
-              var _mW3 = _mStep * 0.6 + _mRng2() * _mStep * 0.6;
-              if (_mPeakH2 > 45) {
-                var _capTip = _mOffY + 30 - _mPeakH2;
-                ctx.beginPath();
-                ctx.moveTo(_mx2 + _mW3 * 0.5, _capTip);
-                ctx.lineTo(_mx2 + _mW3 * 0.5 - 7, _capTip + 12);
-                ctx.lineTo(_mx2 + _mW3 * 0.5 + 7, _capTip + 12);
-                ctx.closePath();
-                ctx.fill();
-              }
-              _mx2 += _mW3 + _mStep * 0.2;
-            }
-          }
-          ctx.restore();
-        }
-      }
       // Jagged underground (rock strata + roots)
       if (bdExtras.jaggedUnderground) {
         var _ugRng = makeSeeded(9991, layoutSeed);
