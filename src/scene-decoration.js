@@ -234,9 +234,9 @@
       // --- Mountain layers drawn right after sky, before ground tiles ---
       if (bdExtras && bdExtras.mountains) {
         var _mColors2 = [
-          theme.mountain1 || 'rgba(100,130,170,0.55)',
-          theme.mountain2 || 'rgba(80,110,150,0.45)',
-          theme.mountain3 || 'rgba(60,90,130,0.35)'
+          theme.mountain1 || 'rgba(90,120,165,0.75)',
+          theme.mountain2 || 'rgba(70,100,145,0.65)',
+          theme.mountain3 || 'rgba(55,80,125,0.55)'
         ];
         for (var _ml2 = 0; _ml2 < 3; _ml2++) {
           var _mRng3 = makeSeeded(_ml2 * 777, layoutSeed);
