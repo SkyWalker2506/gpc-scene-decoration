@@ -234,7 +234,7 @@
             var _th = _timg.naturalHeight || _timg.height || _tileH;
             var _dx = Math.floor(_tx);
             // Draw with 1px width-extension to seal sub-pixel seams between tiles
-            _edCtx.drawImage(_timg, _dx, 0, _tw + 1, _tileH);
+            _edCtx.drawImage(_timg, _dx, 0, _tw + 2, _tileH);
             _tx += _tw;
             _tidx++;
             _loop++;
