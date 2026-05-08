@@ -155,6 +155,7 @@
   //                              over a caller-provided scene
   //   drawBall (optional, default true) — show the cursor "ball" indicator
   //   groundFrac (optional, default 0.66) — vertical ground line as fraction
+  //   groundTiles (optional)   — [{sprite, weight}] tile chain; replaces flat ground colors
   // returns { decoCount }
   function renderStage(opts) {
     const ctx        = opts.ctx;
@@ -167,22 +168,80 @@
     const imgFor     = opts.imgFor || function () { return null; };
     const t          = (typeof opts.time === 'number') ? opts.time : (performance.now() / 1000);
     const layoutSeed = (typeof opts.layoutSeed === 'number') ? opts.layoutSeed : 0.42;
-    const groundFrac = (typeof opts.groundFrac === 'number') ? opts.groundFrac : 0.66;
-    const drawBg     = opts.drawBackground !== false;
-    const drawBall   = opts.drawBall !== false;
+    const groundFrac  = (typeof opts.groundFrac === 'number') ? opts.groundFrac : 0.66;
+    const drawBg      = opts.drawBackground !== false;
+    const drawBall    = opts.drawBall !== false;
+    const groundTiles = Array.isArray(opts.groundTiles) ? opts.groundTiles : null;
 
     const groundY = Math.floor(h * groundFrac);
 
     if (drawBg) {
+      // Sky gradient
       const grad = ctx.createLinearGradient(0, 0, 0, h);
       grad.addColorStop(0, theme.sky1 || '#c9e3ef');
       grad.addColorStop(1, theme.sky2 || '#eaf4da');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = theme.ground || '#9cc26d';
-      ctx.fillRect(0, groundY, w, h - groundY);
-      ctx.fillStyle = theme.dirt || '#7a5a38';
-      ctx.fillRect(0, groundY + 30, w, Math.max(0, h - groundY - 30));
+
+      if (groundTiles && groundTiles.length > 0) {
+        // --- Sprite-based ground + underground ---
+        // Collect loaded HTMLImageElement entries from imgFor cache
+        var _gtImgs = [];
+        var _gtAllLoaded = true;
+        for (var _gti = 0; _gti < groundTiles.length; _gti++) {
+          var _gtSrc = groundTiles[_gti] && groundTiles[_gti].sprite;
+          if (!_gtSrc) continue;
+          var _gtEntry = imgFor(_gtSrc);
+          var _gtImg = _gtEntry && (_gtEntry.draw || _gtEntry._img || _gtEntry);
+          // _gtEntry exposes .complete / .naturalWidth from the underlying image.
+          // _gtImg may be an HTMLImageElement or an OffscreenCanvas (killMagenta result);
+          // both have .width/.naturalWidth we can test.
+          var _loaded = _gtEntry && _gtEntry.complete && _gtEntry.naturalWidth;
+          if (_loaded) {
+            _gtImgs.push(_gtImg);
+          } else {
+            _gtAllLoaded = false;
+          }
+        }
+        if (_gtImgs.length > 0) {
+          // Fill dirt background color first (visible below tile strip)
+          ctx.fillStyle = theme.dirt || '#7a5a38';
+          ctx.fillRect(0, groundY, w, h - groundY);
+          // Draw tiled sprite strip from groundY down to h
+          var _gtMaxH = 0;
+          for (var _m = 0; _m < _gtImgs.length; _m++) {
+            var _mh = _gtImgs[_m].naturalHeight || _gtImgs[_m].height || 0;
+            if (_mh > _gtMaxH) _gtMaxH = _mh;
+          }
+          var _tileH = Math.max(_gtMaxH, h - groundY);
+          var _tx = 0;
+          var _tidx = 0;
+          var _loop = 0;
+          ctx.save();
+          while (_tx < w + 4 && _loop < 800) {
+            var _timg = _gtImgs[_tidx % _gtImgs.length];
+            // HTMLImageElement: naturalWidth; OffscreenCanvas/Canvas: width
+            var _tw = _timg.naturalWidth || _timg.width || 64;
+            ctx.drawImage(_timg, _tx, groundY, _tw, _tileH);
+            _tx += _tw;
+            _tidx++;
+            _loop++;
+          }
+          ctx.restore();
+        } else {
+          // Tiles not yet loaded — fall back to flat colors, will re-render next frame
+          ctx.fillStyle = theme.ground || '#9cc26d';
+          ctx.fillRect(0, groundY, w, h - groundY);
+          ctx.fillStyle = theme.dirt || '#7a5a38';
+          ctx.fillRect(0, groundY + 30, w, Math.max(0, h - groundY - 30));
+        }
+      } else {
+        // --- Flat color ground (legacy / no tiles) ---
+        ctx.fillStyle = theme.ground || '#9cc26d';
+        ctx.fillRect(0, groundY, w, h - groundY);
+        ctx.fillStyle = theme.dirt || '#7a5a38';
+        ctx.fillRect(0, groundY + 30, w, Math.max(0, h - groundY - 30));
+      }
     }
 
     const ballX = cursor.inside ? cursor.x : Math.floor(w * 0.4);
