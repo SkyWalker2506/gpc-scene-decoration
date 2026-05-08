@@ -218,9 +218,8 @@
           var _tidx = 0;
           var _loop = 0;
           ctx.save();
-          // Editor preview: tile chain with sub-pixel flooring for clean edges.
-          // Crossfade is handled via offscreen canvas to avoid destructive compositing.
-          var _FADE_W = 8;
+          // Draw tile chain onto an offscreen canvas then blit.
+          // Use floored integer positions + 1px overlap to eliminate sub-pixel gaps.
           var _edOff = null;
           try { _edOff = new OffscreenCanvas(w, _tileH); } catch (_) {
             _edOff = document.createElement('canvas');
@@ -228,40 +227,14 @@
           }
           var _edCtx = _edOff.getContext('2d');
           _edCtx.clearRect(0, 0, w, _tileH);
-          while (_tx < w + _FADE_W && _loop < 800) {
+          while (_tx < w && _loop < 800) {
             var _timg = _gtImgs[_tidx % _gtImgs.length];
             // HTMLImageElement: naturalWidth; OffscreenCanvas/Canvas: width
-            var _tw = _timg.naturalWidth || _timg.width || 64;
-            _edCtx.drawImage(_timg, Math.floor(_tx), 0, _tw, _tileH);
-            // Crossfade at tile boundary using offscreen (safe — no destructive compositing on live ctx)
-            var _boundary = Math.floor(_tx) + _tw;
-            if (_gtImgs.length > 1 && _boundary > _FADE_W / 2 && _boundary < w - _FADE_W / 2) {
-              var _nextTimg = _gtImgs[(_tidx + 1) % _gtImgs.length];
-              var _nextTw = _nextTimg.naturalWidth || _nextTimg.width || 64;
-              // Build fade zone on a tiny offscreen
-              var _fz = null;
-              try { _fz = new OffscreenCanvas(_FADE_W, _tileH); } catch (_) {
-                _fz = document.createElement('canvas');
-                _fz.width = _FADE_W; _fz.height = _tileH;
-              }
-              var _fzCtx = _fz.getContext('2d');
-              // Current tile's right FADE_W/2 pixels
-              _fzCtx.drawImage(_timg, _tw - _FADE_W / 2, 0, _FADE_W / 2, (_timg.naturalHeight || _timg.height || _tileH),
-                0, 0, _FADE_W / 2, _tileH);
-              // Next tile's left FADE_W/2 pixels
-              _fzCtx.drawImage(_nextTimg, 0, 0, _FADE_W / 2, (_nextTimg.naturalHeight || _nextTimg.height || _tileH),
-                _FADE_W / 2, 0, _FADE_W / 2, _tileH);
-              // Alpha blend: left half = current (full), right half = next (full); crossfade via gradient mask on next
-              // Use destination-in only on the isolated fade-zone canvas
-              var _fzGrad = _fzCtx.createLinearGradient(0, 0, _FADE_W, 0);
-              _fzGrad.addColorStop(0, 'rgba(0,0,0,1)');
-              _fzGrad.addColorStop(1, 'rgba(0,0,0,0)');
-              _fzCtx.globalCompositeOperation = 'destination-in';
-              _fzCtx.fillStyle = _fzGrad;
-              _fzCtx.fillRect(0, 0, _FADE_W, _tileH);
-              // Blit fade zone onto offscreen ground canvas
-              _edCtx.drawImage(_fz, _boundary - _FADE_W / 2, 0);
-            }
+            var _tw = Math.floor(_timg.naturalWidth || _timg.width || 64);
+            var _th = _timg.naturalHeight || _timg.height || _tileH;
+            var _dx = Math.floor(_tx);
+            // Draw with 1px width-extension to seal sub-pixel seams between tiles
+            _edCtx.drawImage(_timg, _dx, 0, _tw + 1, _tileH);
             _tx += _tw;
             _tidx++;
             _loop++;
