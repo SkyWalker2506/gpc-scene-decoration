@@ -178,6 +178,11 @@
     const drawBg      = opts.drawBackground !== false;
     const drawBall    = opts.drawBall === true;
     const groundTiles = Array.isArray(opts.groundTiles) ? opts.groundTiles : null;
+    // groundTileInstances: [{sprite, x, offsetY?, scale?}] — when provided, each tile
+    // is drawn at its explicit world-pixel X instead of tiling the full canvas width.
+    // Used by the course editor stage so only placed instances appear, not an infinite
+    // repeat. When null/undefined the existing full-width tiling behaviour is used.
+    const groundTileInstances = Array.isArray(opts.groundTileInstances) ? opts.groundTileInstances : null;
     const camera      = (opts.camera && typeof opts.camera === 'object') ? opts.camera : null;
     const camX        = camera ? (Number(camera.x) || 0) : 0;
     const camScale    = camera ? Math.max(0.1, Number(camera.scale) || 1) : 1;
@@ -283,8 +288,34 @@
         }
       }
 
-      if (groundTiles && groundTiles.length > 0) {
-        // --- Sprite-based ground + underground ---
+      if (groundTileInstances && groundTileInstances.length > 0) {
+        // --- Instance-mode: draw each placed tile at its explicit world-pixel X ---
+        // Used by the course editor stage so only the tiles the user placed are shown;
+        // no infinite tiling. Each entry: {sprite, x, offsetY?, scale?}
+        for (var _ii = 0; _ii < groundTileInstances.length; _ii++) {
+          var _inst = groundTileInstances[_ii];
+          if (!_inst || !_inst.sprite) continue;
+          var _iEntry = imgFor(_inst.sprite);
+          if (!_iEntry || !_iEntry.complete || !_iEntry.naturalWidth) continue;
+          var _iImg = _iEntry.draw || _iEntry._img || _iEntry;
+          var _iNW = _iImg.naturalWidth || _iImg.width || 64;
+          var _iNH = _iImg.naturalHeight || _iImg.height || (wH - groundY);
+          var _iScale = Number(_inst.scale) || 1;
+          var _iOY = Number(_inst.offsetY) || 0;
+          var _iW = Math.round(_iNW * _iScale);
+          var _iH = Math.round(_iNH * _iScale);
+          var _iX = Number(_inst.x) || 0;
+          var _iY = groundY + _iOY;
+          // Fill dirt background behind this tile
+          ctx.fillStyle = theme.dirt || '#7a5a38';
+          ctx.fillRect(_iX, _iY, _iW, wH - _iY);
+          // Draw the tile sprite
+          ctx.drawImage(_iImg, _iX, _iY, _iW, Math.max(_iH, wH - _iY));
+          // Register bbox for hit-testing
+          bboxes.push({ kind: 'ground-default', idx: _ii, sprite: _inst.sprite, x: _iX, y: _iY, w: _iW, h: Math.max(_iH, wH - _iY) });
+        }
+      } else if (groundTiles && groundTiles.length > 0) {
+        // --- Full-width tiling mode (used when no explicit instances are provided) ---
         // Collect loaded HTMLImageElement entries from imgFor cache
         var _gtImgs = [];
         var _gtAllLoaded = true;
@@ -356,6 +387,23 @@
 
     // --- Backdrop extras: ground-level layers (jagged underground, pebbles, roots) ---
     // Mountains are drawn earlier (after sky gradient) via the separate inline block.
+    // When groundTileInstances is active, clip the underground/pebble/root layers so
+    // they only render within the X bounds of placed tiles.
+    if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
+      ctx.save();
+      ctx.beginPath();
+      for (var _ci = 0; _ci < groundTileInstances.length; _ci++) {
+        var _cInst = groundTileInstances[_ci];
+        if (!_cInst) continue;
+        var _ciEntry = imgFor(_cInst.sprite);
+        var _ciNW = (_ciEntry && _ciEntry.naturalWidth) || 64;
+        var _ciScale = Number(_cInst.scale) || 1;
+        var _ciW = Math.round(_ciNW * _ciScale);
+        var _ciX = Number(_cInst.x) || 0;
+        ctx.rect(_ciX, groundY, _ciW, wH - groundY);
+      }
+      ctx.clip();
+    }
     if (drawBg && bdExtras) {
       // Jagged underground (rock strata + roots)
       if (bdExtras.jaggedUnderground) {
@@ -416,6 +464,10 @@
         }
         ctx.restore();
       }
+    }
+    // Close the instance-bounds clip if we opened one
+    if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
+      ctx.restore();
     }
 
     // World boundary markers: dashed red lines at x=0 and x=wW
