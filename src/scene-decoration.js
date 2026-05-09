@@ -237,55 +237,124 @@
       ctx.fillRect(camX - 10, 0, wW + 20, wH);
 
       // --- Mountain layers drawn right after sky, before ground tiles ---
+      // Uses game.js-parity rendering: fixed peaks array + forest silhouette + close ridge.
       if (bdExtras && bdExtras.mountains) {
-        var _mColors2 = [
-          theme.mountain1 || 'rgba(90,120,165,0.75)',
-          theme.mountain2 || 'rgba(70,100,145,0.65)',
-          theme.mountain3 || 'rgba(55,80,125,0.55)'
-        ];
-        for (var _ml2 = 0; _ml2 < 3; _ml2++) {
-          var _mRng3 = makeSeeded(_ml2 * 777, layoutSeed);
-          var _mOffY2 = groundY * (0.22 + _ml2 * 0.08);
-          ctx.save();
-          ctx.fillStyle = _mColors2[_ml2];
-          ctx.beginPath();
-          var _mx3 = camX - 10;
-          ctx.moveTo(_mx3, groundY);
-          ctx.lineTo(_mx3, _mOffY2 + 30);
-          var _mStep2 = 36 + _ml2 * 20;
-          var _mx3orig = _mx3;
-          while (_mx3 < camX + wW + 10) {
-            var _mPeakH3 = 28 + _mRng3() * 44 + _ml2 * 12;
-            var _mW4 = _mStep2 * 0.6 + _mRng3() * _mStep2 * 0.6;
-            ctx.lineTo(_mx3 + _mW4 * 0.5, _mOffY2 + 30 - _mPeakH3);
-            ctx.lineTo(_mx3 + _mW4, _mOffY2 + 30);
-            _mx3 += _mW4 + _mStep2 * 0.2;
-          }
-          ctx.lineTo(_mx3, groundY);
-          ctx.closePath();
-          ctx.fill();
-          // Snow caps (first layer only, tallest peaks)
-          if (_ml2 === 0) {
-            ctx.fillStyle = 'rgba(255,255,255,0.38)';
-            var _mRng4 = makeSeeded(0 * 777, layoutSeed);
-            var _mx4 = camX - 10;
-            while (_mx4 < camX + wW + 10) {
-              var _mPeakH4 = 28 + _mRng4() * 44;
-              var _mW5 = _mStep2 * 0.6 + _mRng4() * _mStep2 * 0.6;
-              if (_mPeakH4 > 45) {
-                var _capTip2 = _mOffY2 + 30 - _mPeakH4;
-                ctx.beginPath();
-                ctx.moveTo(_mx4 + _mW5 * 0.5, _capTip2);
-                ctx.lineTo(_mx4 + _mW5 * 0.5 - 7, _capTip2 + 12);
-                ctx.lineTo(_mx4 + _mW5 * 0.5 + 7, _capTip2 + 12);
-                ctx.closePath();
-                ctx.fill();
-              }
-              _mx4 += _mW5 + _mStep2 * 0.2;
-            }
-          }
-          ctx.restore();
+        // Scale factor: game renders at fixed W (660px); editor uses wW.
+        var _mScale = wW / 660;
+        var _GY = groundY; // HORIZON equivalent
+
+        // Colours derived from theme (matches game.js lerpC outputs for daytime)
+        var _mountainColor = theme.mountainFill || '#8FA3B8';
+        var _forestColor   = theme.forestFill   || '#4A6428';
+        var _ridgeColor    = theme.ridgeFill     || '#5A7830';
+
+        // LAYER 1: Distant jagged mountain range with fixed peaks (game.js parity)
+        var _peaks = [
+          { x: -10,  y: _GY + 2  },
+          { x: 50,   y: _GY - 28 },
+          { x: 95,   y: _GY - 12 },
+          { x: 155,  y: _GY - 42 },
+          { x: 210,  y: _GY - 20 },
+          { x: 270,  y: _GY - 38 },
+          { x: 340,  y: _GY - 18 },
+          { x: 400,  y: _GY - 48 },
+          { x: 465,  y: _GY - 24 },
+          { x: 530,  y: _GY - 35 },
+          { x: 595,  y: _GY - 16 },
+          { x: 660,  y: _GY - 30 },
+          { x: 720,  y: _GY - 10 }
+        ].map(function(p) { return { x: p.x * _mScale, y: _GY + (p.y - _GY) }; });
+
+        ctx.save();
+        ctx.fillStyle = _mountainColor;
+        ctx.beginPath();
+        ctx.moveTo(-20, _GY + 8);
+        for (var _pi2 = 0; _pi2 < _peaks.length; _pi2++) {
+          ctx.lineTo(_peaks[_pi2].x, _peaks[_pi2].y);
         }
+        ctx.lineTo(wW + 20, _GY + 8);
+        ctx.closePath();
+        ctx.fill();
+        // Snow caps on tallest peaks
+        ctx.fillStyle = 'rgba(255,255,255,0.72)';
+        for (var _si = 1; _si < _peaks.length - 1; _si++) {
+          var _sp = _peaks[_si];
+          if (_sp.y < _GY - 24) {
+            ctx.beginPath();
+            ctx.moveTo(_sp.x - 6, _sp.y + 6);
+            ctx.lineTo(_sp.x, _sp.y + 0.5);
+            ctx.lineTo(_sp.x + 6, _sp.y + 7);
+            ctx.lineTo(_sp.x + 3, _sp.y + 4);
+            ctx.lineTo(_sp.x,     _sp.y + 6);
+            ctx.lineTo(_sp.x - 3, _sp.y + 4);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+
+        // LAYER 2: Forest silhouette (game.js parity)
+        ctx.save();
+        ctx.fillStyle = _forestColor;
+        // Base hill
+        ctx.beginPath();
+        ctx.moveTo(-20, _GY + 8);
+        ctx.lineTo(-20, _GY + 2);
+        ctx.quadraticCurveTo(80  * _mScale, _GY - 10, 200 * _mScale, _GY - 4);
+        ctx.quadraticCurveTo(320 * _mScale, _GY + 2,  440 * _mScale, _GY - 8);
+        ctx.quadraticCurveTo(560 * _mScale, _GY - 16, wW + 20, _GY - 6);
+        ctx.lineTo(wW + 20, _GY + 8);
+        ctx.closePath();
+        ctx.fill();
+        // Individual tree silhouettes
+        for (var _ti2 = 0; _ti2 < 28; _ti2++) {
+          var _tx2 = (5 + _ti2 * 25 + ((_ti2 * 1301 + 23) % 14)) * _mScale;
+          var _isPine = (_ti2 * 7 + 23) % 3 !== 0;
+          var _tBaseY = _GY + (Math.sin(_tx2 * 0.012 / _mScale) * -8) + (Math.sin(_tx2 * 0.008 / _mScale + 1) * -4);
+          if (_isPine) {
+            var _tH = (10 + ((_ti2 * 19) % 8)) * _mScale;
+            ctx.beginPath();
+            ctx.moveTo(_tx2 - 3 * _mScale, _tBaseY);
+            ctx.lineTo(_tx2, _tBaseY - _tH);
+            ctx.lineTo(_tx2 + 3 * _mScale, _tBaseY - _tH * 0.55);
+            ctx.lineTo(_tx2 + 2 * _mScale, _tBaseY - _tH * 0.55);
+            ctx.lineTo(_tx2 + 4 * _mScale, _tBaseY - _tH * 0.25);
+            ctx.lineTo(_tx2 + 3 * _mScale, _tBaseY);
+            ctx.closePath();
+            ctx.fill();
+          } else {
+            var _tR = (4 + ((_ti2 * 13) % 4)) * _mScale;
+            ctx.beginPath();
+            ctx.arc(_tx2, _tBaseY - _tR, _tR, 0, Math.PI * 2);
+            ctx.arc(_tx2 - _tR * 0.6, _tBaseY - _tR * 0.8, _tR * 0.75, 0, Math.PI * 2);
+            ctx.arc(_tx2 + _tR * 0.6, _tBaseY - _tR * 0.8, _tR * 0.75, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+
+        // LAYER 3: Close ridge (game.js parity)
+        ctx.save();
+        ctx.fillStyle = _ridgeColor;
+        ctx.beginPath();
+        ctx.moveTo(-20, _GY + 8);
+        ctx.lineTo(-20, _GY + 6);
+        ctx.quadraticCurveTo(110 * _mScale, _GY - 2, 240 * _mScale, _GY + 4);
+        ctx.quadraticCurveTo(370 * _mScale, _GY + 10, 500 * _mScale, _GY + 2);
+        ctx.quadraticCurveTo(620 * _mScale, _GY - 4, wW + 20, _GY + 4);
+        ctx.lineTo(wW + 20, _GY + 8);
+        ctx.closePath();
+        ctx.fill();
+        // Soft outline on close ridge
+        ctx.strokeStyle = 'rgba(30,18,8,0.30)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-20, _GY + 6);
+        ctx.quadraticCurveTo(110 * _mScale, _GY - 2, 240 * _mScale, _GY + 4);
+        ctx.quadraticCurveTo(370 * _mScale, _GY + 10, 500 * _mScale, _GY + 2);
+        ctx.quadraticCurveTo(620 * _mScale, _GY - 4, wW + 20, _GY + 4);
+        ctx.stroke();
+        ctx.restore();
       }
 
       if (groundTileInstances && groundTileInstances.length > 0) {
@@ -387,8 +456,8 @@
 
     // --- Backdrop extras: ground-level layers (jagged underground, pebbles, roots) ---
     // Mountains are drawn earlier (after sky gradient) via the separate inline block.
-    // When groundTileInstances is active, clip the underground/pebble/root layers so
-    // they only render within the X bounds of placed tiles.
+    // Ground-level extras (underground/pebbles/roots) are ONLY drawn when there is at
+    // least one ground tile instance placed. Zero instances = sky-only scene.
     if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
       ctx.save();
       ctx.beginPath();
@@ -404,7 +473,7 @@
       }
       ctx.clip();
     }
-    if (drawBg && bdExtras) {
+    if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
       // Jagged underground (rock strata + roots)
       if (bdExtras.jaggedUnderground) {
         var _ugRng = makeSeeded(9991, layoutSeed);
