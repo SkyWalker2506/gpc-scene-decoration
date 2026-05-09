@@ -456,24 +456,9 @@
 
     // --- Backdrop extras: ground-level layers (jagged underground, pebbles, roots) ---
     // Mountains are drawn earlier (after sky gradient) via the separate inline block.
-    // Ground-level extras (underground/pebbles/roots) are ONLY drawn when there is at
-    // least one ground tile instance placed. Zero instances = sky-only scene.
-    if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
-      ctx.save();
-      ctx.beginPath();
-      for (var _ci = 0; _ci < groundTileInstances.length; _ci++) {
-        var _cInst = groundTileInstances[_ci];
-        if (!_cInst) continue;
-        var _ciEntry = imgFor(_cInst.sprite);
-        var _ciNW = (_ciEntry && _ciEntry.naturalWidth) || 64;
-        var _ciScale = Number(_cInst.scale) || 1;
-        var _ciW = Math.round(_ciNW * _ciScale);
-        var _ciX = Number(_cInst.x) || 0;
-        ctx.rect(_ciX, groundY, _ciW, wH - groundY);
-      }
-      ctx.clip();
-    }
-    if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
+    // Ground-level extras draw whenever ground tiles are present (full-width tiling).
+    var _hasGround = (groundTiles && groundTiles.length > 0) || (groundTileInstances && groundTileInstances.length > 0);
+    if (drawBg && bdExtras && _hasGround) {
       // Jagged underground (rock strata + roots)
       if (bdExtras.jaggedUnderground) {
         var _ugRng = makeSeeded(9991, layoutSeed);
@@ -534,10 +519,7 @@
         ctx.restore();
       }
     }
-    // Close the instance-bounds clip if we opened one
-    if (drawBg && bdExtras && groundTileInstances && groundTileInstances.length > 0) {
-      ctx.restore();
-    }
+    // (no clip to close — full-width backdrop, no instance clipping)
 
     // World boundary markers: dashed red lines at x=0 and x=wW
     ctx.save();
